@@ -33,16 +33,13 @@ class BaseClient(object):
         self.baseResource = baseResource
 
     def get(self, resPath, queryParams=None):
-        theUrl = "{}/{}".format(self.baseURL, resPath)
+        theUrl = f"{self.baseURL}/{resPath}"
         resp = requests.get(theUrl, params=queryParams)
         self.__checkForSuccess(resp)
-        if(resp.content == b''):
-            return None
-        else:
-            return resp.json()
+        return None if (resp.content == b'') else resp.json()
 
     def post(self, resPath, queryParams, body, headers=None):
-        theUrl = "{}/{}".format(self.baseURL, resPath)
+        theUrl = f"{self.baseURL}/{resPath}"
         theHeader = self.headers
         if headers is not None:
             theHeader = self.mergeTwoDicts(self.headers, headers)
@@ -56,7 +53,7 @@ class BaseClient(object):
         return self.__return(resp, theHeader)
 
     def put(self, resPath, queryParams=None, body=None, headers=None):
-        theUrl = "{}/{}".format(self.baseURL, resPath)
+        theUrl = f"{self.baseURL}/{resPath}"
         theHeader = self.headers
         if headers is not None:
             theHeader = self.mergeTwoDicts(self.headers, headers)
@@ -71,19 +68,19 @@ class BaseClient(object):
         self.__checkForSuccess(resp)
 
     def delete(self, resPath, queryParams):
-        theUrl = "{}/{}".format(self.baseURL, resPath)
+        theUrl = f"{self.baseURL}/{resPath}"
         resp = requests.delete(theUrl, params=queryParams)
         self.__print(resp)
         self.__checkForSuccess(resp)
 
     def makeUrl(self, urlformat=None, *argv):
-        url = self.baseResource + '/'
+        url = f'{self.baseResource}/'
         if urlformat:
             url += urlformat.format(*argv)
         return url
 
     def makeParams(self, **kwargs):
-        return dict((k, v) for k, v in kwargs.items() if v is not None) or None
+        return {k: v for k, v in kwargs.items() if v is not None} or None
 
     def mergeTwoDicts(self, x, y):
         z = x.copy()
@@ -95,21 +92,22 @@ class BaseClient(object):
             print(resp.url)
 
     def __return(self, resp, header):
-        retval = ''
         if len(resp.text) > 0:
-            if header['Accept'] == 'text/plain':
-                retval = resp.text
-            elif header['Accept'] == 'application/json':
-                retval = resp.json()
-            else:
-                retval = resp.text
-        return retval
+            return (
+                resp.text
+                if header['Accept'] == 'text/plain'
+                or header['Accept'] != 'application/json'
+                else resp.json()
+            )
+
+        else:
+            return ''
 
     def __checkForSuccess(self, resp):
         try:
             resp.raise_for_status()
         except requests.HTTPError:
-            print("ERROR: " + resp.text)
+            print(f"ERROR: {resp.text}")
             raise
 
 
@@ -186,37 +184,31 @@ class TaskClient(BaseClient):
 
     def pollForTask(self, taskType, workerid, domain=None):
         url = self.makeUrl('poll/{}', taskType)
-        params = {}
-        params['workerid'] = workerid
+        params = {'workerid': workerid}
         if domain is not None:
             params['domain'] = domain
 
         try:
             return self.get(url, params)
         except Exception as err:
-            print('Error while polling ' + str(err))
+            print(f'Error while polling {str(err)}')
             return None
 
     def pollForBatch(self, taskType, count, timeout, workerid, domain=None):
         url = self.makeUrl('poll/batch/{}', taskType)
-        params = {}
-        params['workerid'] = workerid
-        params['count'] = count
-        params['timeout'] = timeout
-
+        params = {'workerid': workerid, 'count': count, 'timeout': timeout}
         if domain is not None:
             params['domain'] = domain
 
         try:
             return self.get(url, params)
         except Exception as err:
-            print('Error while polling ' + str(err))
+            print(f'Error while polling {str(err)}')
             return None
 
     def ackTask(self, taskId, workerid):
         url = self.makeUrl('{}/ack', taskId)
-        params = {}
-        params['workerid'] = workerid
+        params = {'workerid': workerid}
         headers = {'Accept': 'application/json'}
         value = self.post(url, params, None, headers)
         return value in ['true', True]
@@ -227,8 +219,7 @@ class TaskClient(BaseClient):
 
     def removeTaskFromQueue(self, taskId, reason=None):
         url = self.makeUrl('queue/{}', taskId)
-        params = {}
-        params['reason'] = reason
+        params = {'reason': reason}
         self.delete(url, params)
 
     def getTaskQueueSizes(self, listOfTaskName):
@@ -244,30 +235,23 @@ class WorkflowClient(BaseClient):
 
     def getWorkflow(self, wfId, includeTasks=True):
         url = self.makeUrl('{}', wfId)
-        params = {}
-        params['includeTasks'] = includeTasks
+        params = {'includeTasks': includeTasks}
         return self.get(url, params)
 
     def getRunningWorkflows(self, wfName, version=None, startTime=None, endTime=None):
         url = self.makeUrl('running/{}', wfName)
-        params = {}
-        params['version'] = version
-        params['startTime'] = startTime
-        params['endTime'] = endTime
+        params = {'version': version, 'startTime': startTime, 'endTime': endTime}
         return self.get(url, params)
 
     def startWorkflow(self, wfName, inputjson, version=None, correlationId=None):
         url = self.makeUrl('{}', wfName)
-        params = {}
-        params['version'] = version
-        params['correlationId'] = correlationId
+        params = {'version': version, 'correlationId': correlationId}
         headers = {'Accept': 'text/plain'}
         return self.post(url, params, inputjson, headers)
 
     def terminateWorkflow(self, wfId, reason=None):
         url = self.makeUrl('{}', wfId)
-        params = {}
-        params['reason'] = reason
+        params = {'reason': reason}
         self.delete(url, params)
 
     def removeWorkflow(self, wfId, archiveWorkflow, reason=None):
@@ -292,8 +276,7 @@ class WorkflowClient(BaseClient):
 
     def restartWorkflow(self, wfId, taskRefName, fromTaskRef):
         url = self.makeUrl('{}/restart', wfId)
-        params = {}
-        params['from'] = fromTaskRef
+        params = {'from': fromTaskRef}
         self.post(url, params, None)
 
 class EventServicesClient(BaseClient):
@@ -304,8 +287,7 @@ class EventServicesClient(BaseClient):
 
     def getEventHandlerDef(self, event, activeOnly=True):
         url = self.makeUrl('{}', event)
-        params = {}
-        params['activeOnly'] = activeOnly
+        params = {'activeOnly': activeOnly}
         return self.get(url, params)
 
     def getEventHandlerDefs(self):

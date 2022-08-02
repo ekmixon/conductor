@@ -109,7 +109,9 @@ class ConductorWorker:
     def execute(self, task, exec_function):
         try:
             resp = exec_function(task)
-            if type(resp) is not dict or not all(key in resp for key in ('status', 'output', 'logs')):
+            if type(resp) is not dict or any(
+                key not in resp for key in ('status', 'output', 'logs')
+            ):
                 raise Exception('Task execution function MUST return a response as a dict with status, output and logs fields')
             task['status'] = resp['status']
             task['outputData'] = resp['output']
@@ -158,7 +160,7 @@ class ConductorWorker:
             By default, it is set to None
         """
         print('Polling for task %s at a %f ms interval with %d threads for task execution, with worker id as %s' % (taskType, self.polling_interval * 1000, self.thread_count, self.worker_id))
-        for x in range(0, int(self.thread_count)):
+        for _ in range(int(self.thread_count)):
             thread = Thread(target=self.poll_and_execute, args=(taskType, exec_function, domain,))
             thread.daemon = True
             thread.start()
